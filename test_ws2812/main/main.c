@@ -9,116 +9,68 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "ws2812b_driver.h"
+#include "wifi_manager.h"
+#include "wifi_config.h"
+#include "ws2812b_config.h"
 
 static const char *TAG = "MAIN";
 
-// 定义GPIO引脚（您可以根据需要修改）
-#define WS2812B_GPIO_PIN    GPIO_NUM_10   // 使用GPIO10，根据实际连接修改
+// 任务句柄
+static TaskHandle_t wifi_monitor_task_handle = NULL;
 
-// 测试任务句柄
-static TaskHandle_t test_task_handle = NULL;
-
-// 测试任务函数
-static void ws2812b_test_task(void *pvParameters)
+// WiFi状态回调函数
+static void wifi_state_callback(wifi_state_t state, void *user_data)
 {
-    ESP_LOGI(TAG, "WS2812B测试任务开始");
+    switch (state) {
+        case WIFI_STATE_DISCONNECTED:
+            ESP_LOGI(TAG, "WiFi状态: 未连接");
+            // 可以在这里添加LED指示，比如红色闪烁
+            break;
+        case WIFI_STATE_CONNECTING:
+            ESP_LOGI(TAG, "WiFi状态: 连接中");
+            // 可以在这里添加LED指示，比如黄色常亮
+            break;
+        case WIFI_STATE_CONNECTED:
+            ESP_LOGI(TAG, "WiFi状态: 已连接");
+            // 可以在这里添加LED指示，比如绿色常亮
+            break;
+        case WIFI_STATE_FAILED:
+            ESP_LOGE(TAG, "WiFi状态: 连接失败");
+            // 可以在这里添加LED指示，比如红色常亮
+            break;
+        case WIFI_STATE_DISCONNECTING:
+            ESP_LOGI(TAG, "WiFi状态: 断开连接中");
+            break;
+    }
+}
+
+// WiFi IP回调函数
+static void wifi_ip_callback(const char *ip_addr, void *user_data)
+{
+    ESP_LOGI(TAG, "获取到IP地址: %s", ip_addr);
     
-    // 等待一段时间让系统稳定
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // 可以在这里添加网络相关的功能
+    // 比如启动HTTP服务器、MQTT客户端等
+}
+
+// WiFi监控任务
+static void wifi_monitor_task(void *pvParameters)
+{
+    ESP_LOGI(TAG, "WiFi监控任务启动");
     
     while (1) {
-        ESP_LOGI(TAG, "=== 开始WS2812B测试循环 ===");
-        
-        // 1. 基本颜色测试
-        ws2812b_test_basic_colors();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        // 2. 彩虹效果测试
-        ws2812b_test_rainbow();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        // 3. 渐变效果测试
-        ws2812b_test_fade();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        // 4. 闪烁效果测试
-        ws2812b_test_blink();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
-        // 5. 自定义颜色序列测试
-        ESP_LOGI(TAG, "开始自定义颜色序列测试");
-        
-        // 黄色
-        ws2812b_set_all_pixels((ws2812b_color_t)WS2812B_COLOR_YELLOW);
-        ws2812b_refresh();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 青色
-        ws2812b_set_all_pixels((ws2812b_color_t)WS2812B_COLOR_CYAN);
-        ws2812b_refresh();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 洋红色
-        ws2812b_set_all_pixels((ws2812b_color_t)WS2812B_COLOR_MAGENTA);
-        ws2812b_refresh();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 橙色
-        ws2812b_set_all_pixels((ws2812b_color_t)WS2812B_COLOR_ORANGE);
-        ws2812b_refresh();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 紫色
-        ws2812b_set_all_pixels((ws2812b_color_t)WS2812B_COLOR_PURPLE);
-        ws2812b_refresh();
-        vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // 6. 呼吸灯效果
-        ESP_LOGI(TAG, "开始呼吸灯效果测试");
-        for (int i = 0; i < 3; i++) {
-            // 红色呼吸
-            for (int brightness = 0; brightness <= 255; brightness += 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){brightness, 0, 0});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
-            }
-            for (int brightness = 255; brightness >= 0; brightness -= 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){brightness, 0, 0});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
-            }
-            
-            // 绿色呼吸
-            for (int brightness = 0; brightness <= 255; brightness += 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){0, brightness, 0});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
-            }
-            for (int brightness = 255; brightness >= 0; brightness -= 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){0, brightness, 0});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
-            }
-            
-            // 蓝色呼吸
-            for (int brightness = 0; brightness <= 255; brightness += 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){0, 0, brightness});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
-            }
-            for (int brightness = 255; brightness >= 0; brightness -= 5) {
-                ws2812b_set_all_pixels((ws2812b_color_t){0, 0, brightness});
-                ws2812b_refresh();
-                vTaskDelay(pdMS_TO_TICKS(30));
+        wifi_info_t wifi_info;
+        if (wifi_manager_get_info(&wifi_info) == ESP_OK) {
+            // 每10秒打印一次WiFi状态
+            if (wifi_info.state == WIFI_STATE_CONNECTED) {
+                ESP_LOGI(TAG, "WiFi状态: 已连接 | SSID: %s | RSSI: %d | IP: %s", 
+                         wifi_info.ssid, wifi_info.rssi, wifi_manager_get_ip_string());
+            } else {
+                ESP_LOGI(TAG, "WiFi状态: %d", wifi_info.state);
             }
         }
         
-        // 7. 关闭LED
-        ws2812b_clear();
-        ws2812b_refresh();
-        
-        ESP_LOGI(TAG, "=== WS2812B测试循环完成，等待5秒后重新开始 ===");
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
@@ -134,25 +86,42 @@ static esp_err_t init_nvs(void)
     return ESP_OK;
 }
 
-// 初始化网络接口
-static esp_err_t init_netif(void)
+// 初始化WiFi
+static esp_err_t init_wifi(void)
 {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    ESP_LOGI(TAG, "初始化WiFi管理器");
+    
+    // 初始化WiFi管理器
+    ESP_ERROR_CHECK(wifi_manager_init());
+    
+    // 设置回调函数
+    wifi_manager_set_event_callback(wifi_state_callback, NULL);
+    wifi_manager_set_ip_callback(wifi_ip_callback, NULL);
+    
+    // 设置WiFi配置 - 直接连接，不通过配置结构体
+    
+    // 连接WiFi
+    ESP_LOGI(TAG, "连接WiFi: %s", WIFI_SSID);
+    esp_err_t ret = wifi_manager_connect(WIFI_SSID, WIFI_PASSWORD);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "WiFi连接失败: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
     return ESP_OK;
 }
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "ESP32-C3 WS2812B测试程序启动");
+    ESP_LOGI(TAG, "ESP32-C3 WS2812B + WiFi 项目启动");
     ESP_LOGI(TAG, "芯片型号: %s", CONFIG_IDF_TARGET);
     ESP_LOGI(TAG, "ESP-IDF版本: %s", esp_get_idf_version());
     
     // 初始化NVS
     ESP_ERROR_CHECK(init_nvs());
     
-    // 初始化网络接口
-    ESP_ERROR_CHECK(init_netif());
+    // 初始化WiFi
+    ESP_ERROR_CHECK(init_wifi());
     
     // 初始化WS2812B驱动
     ESP_LOGI(TAG, "初始化WS2812B驱动，使用GPIO: %d", WS2812B_GPIO_PIN);
@@ -164,31 +133,34 @@ void app_main(void)
     
     ESP_LOGI(TAG, "WS2812B驱动初始化成功！");
     
-    // 创建测试任务
-    BaseType_t task_created = xTaskCreate(
-        ws2812b_test_task,           // 任务函数
-        "ws2812b_test",              // 任务名称
-        4096,                        // 堆栈大小
-        NULL,                        // 任务参数
-        5,                           // 任务优先级
-        &test_task_handle            // 任务句柄
+    // 创建WiFi监控任务
+    BaseType_t wifi_task_created = xTaskCreate(
+        wifi_monitor_task,        // 任务函数
+        "wifi_monitor",           // 任务名称
+        4096,                     // 堆栈大小
+        NULL,                     // 任务参数
+        4,                        // 任务优先级
+        &wifi_monitor_task_handle // 任务句柄
     );
     
-    if (task_created != pdPASS) {
-        ESP_LOGE(TAG, "创建WS2812B测试任务失败");
-        ws2812b_deinit();
+    if (wifi_task_created != pdPASS) {
+        ESP_LOGE(TAG, "创建WiFi监控任务失败");
         return;
     }
-    
-    ESP_LOGI(TAG, "WS2812B测试任务创建成功，系统启动完成！");
-    ESP_LOGI(TAG, "LED将开始显示各种颜色和效果...");
     
     // 主任务可以在这里添加其他功能
     while (1) {
         // 主任务保持运行
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        vTaskDelay(pdMS_TO_TICKS(30000));
         
-        // 每10秒打印一次系统状态
+        // 每30秒打印一次系统状态
         ESP_LOGI(TAG, "系统运行中... 可用堆内存: %d bytes", esp_get_free_heap_size());
+        
+        // 检查WiFi状态
+        if (wifi_manager_is_connected()) {
+            ESP_LOGI(TAG, "WiFi状态: 已连接 | IP: %s", wifi_manager_get_ip_string());
+        } else {
+            ESP_LOGW(TAG, "WiFi状态: 未连接");
+        }
     }
 }
